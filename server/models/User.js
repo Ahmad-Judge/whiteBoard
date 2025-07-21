@@ -6,4 +6,4 @@ const UserSchema = new mongoose.Schema({
   ratings: [Number] // store individual ratings (e.g. [4, 5, 3])
 });
 
-module.exports = mongoose.model("User", UserSchema);
+module.exports = mongoose.model("User", UserSchema, "chat_users");
