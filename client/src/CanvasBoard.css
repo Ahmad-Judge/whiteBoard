@@ -294,7 +294,9 @@ html, body {
   display: block;
   
 }
-
+canvas {
+  touch-action: none; /* Prevents scroll/zoom while drawing */
+}
 .reset-btn {
   margin-top: 1rem;
   padding: 0.5rem 1rem;
@@ -380,7 +382,7 @@ html, body {
   }
 
   .canvas {
-    height: 250px;
+    height: 100%;
     width: 100%;
   }
 
