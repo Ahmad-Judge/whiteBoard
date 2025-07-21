@@ -4,7 +4,6 @@ import "./CanvasBoard.css";
 
 const socket = io(process.env.REACT_APP_BACKEND_URL);
 
-
 const CanvasBoard = () => {
   const canvasRef = useRef(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -92,9 +91,12 @@ const CanvasBoard = () => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+    const clientX = e.clientX || e.touches?.[0]?.clientX;
+    const clientY = e.clientY || e.touches?.[0]?.clientY;
+
     return {
-      offsetX: (e.clientX - rect.left) * scaleX,
-      offsetY: (e.clientY - rect.top) * scaleY,
+      offsetX: (clientX - rect.left) * scaleX,
+      offsetY: (clientY - rect.top) * scaleY,
     };
   };
 
@@ -123,6 +125,34 @@ const CanvasBoard = () => {
 
   const handleMouseUp = () => setIsDrawing(false);
 
+  // ✅ Touch Handlers for Mobile
+  const handleTouchStart = (e) => {
+    if (!canDraw) return;
+    e.preventDefault();
+    setIsDrawing(true);
+    const { offsetX, offsetY } = getOffsetCoords(e);
+    canvasRef.current.lastX = offsetX;
+    canvasRef.current.lastY = offsetY;
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDrawing || !canDraw) return;
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    const { offsetX, offsetY } = getOffsetCoords(e);
+    const x0 = canvas.lastX;
+    const y0 = canvas.lastY;
+    const x1 = offsetX;
+    const y1 = offsetY;
+    const lineData = { x0, y0, x1, y1, color: "black" };
+    drawLine(lineData);
+    socket.emit("draw", lineData);
+    canvas.lastX = x1;
+    canvas.lastY = y1;
+  };
+
+  const handleTouchEnd = () => setIsDrawing(false);
+
   const handleLeave = () => {
     socket.emit("leave");
     setUsername("");
@@ -130,6 +160,7 @@ const CanvasBoard = () => {
     setCurrentDrawer(null);
     setLeaderboard(null);
   };
+
   const handlereset = () => {
     socket.emit("resetall");
     setUsername("");
@@ -179,7 +210,8 @@ const CanvasBoard = () => {
                 color: currentDrawer === user.socketId ? "#009688" : "inherit",
               }}
             >
-              {user.name} — ⭐ {typeof user.rating === "number" ? user.rating.toFixed(1) : "N/A"}
+              {user.name} — ⭐{" "}
+              {typeof user.rating === "number" ? user.rating.toFixed(1) : "N/A"}
               {user.name !== username && (
                 <>
                   <br />
@@ -215,6 +247,9 @@ const CanvasBoard = () => {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
           />
         </div>
         {canDraw && (
@@ -226,7 +261,7 @@ const CanvasBoard = () => {
           🚪 Leave
         </button>
         <button className="leave-btn" onClick={handlereset}>
-          delete all players
+          🗑️ Delete All Players
         </button>
       </div>
 
