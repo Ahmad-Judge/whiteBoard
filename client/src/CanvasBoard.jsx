@@ -44,7 +44,9 @@ const CanvasBoard = () => {
   const drawLine = ({ x0, y0, x1, y1, color }) => {
     const ctx = canvasRef.current.getContext("2d");
     ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 3; // Slightly thicker for mobile
+    ctx.lineCap = 'round'; // Smoother line ends
+    ctx.lineJoin = 'round'; // Smoother line joins
     ctx.beginPath();
     ctx.moveTo(x0, y0);
     ctx.lineTo(x1, y1);
@@ -64,18 +66,33 @@ const CanvasBoard = () => {
     const ctx = canvas.getContext("2d");
 
     const resizeCanvas = () => {
-      const scale = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      
+      // Set actual canvas size
       canvas.width = rect.width * scale;
       canvas.height = rect.height * scale;
-      ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      
+      // Scale the canvas back down using CSS
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+      
+      // Scale the drawing context so everything draws at the correct size
+      ctx.scale(scale, scale);
+      
+      // Improve line quality
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
     };
 
     resizeCanvas();
     window.addEventListener("resize", resizeCanvas);
 
     socket.on("draw", drawLine);
-    socket.on("clear", () => ctx.clearRect(0, 0, canvas.width, canvas.height));
+    socket.on("clear", () => {
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+    });
     socket.on("history", (history) => history.forEach(drawLine));
 
     return () => {
@@ -86,36 +103,49 @@ const CanvasBoard = () => {
     };
   }, [username]);
 
-  const getOffsetCoords = (e) => {
+  // Improved coordinate calculation
+  const getCoordinates = (e) => {
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const clientX = e.clientX || e.touches?.[0]?.clientX;
-    const clientY = e.clientY || e.touches?.[0]?.clientY;
-
+    
+    let clientX, clientY;
+    
+    if (e.touches && e.touches.length > 0) {
+      // Touch event
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if (e.clientX !== undefined) {
+      // Mouse event
+      clientX = e.clientX;
+      clientY = e.clientY;
+    } else {
+      return { x: 0, y: 0 };
+    }
+    
     return {
-      offsetX: (clientX - rect.left) * scaleX,
-      offsetY: (clientY - rect.top) * scaleY,
+      x: clientX - rect.left,
+      y: clientY - rect.top
     };
   };
 
   const handleMouseDown = (e) => {
     if (!canDraw) return;
+    e.preventDefault();
     setIsDrawing(true);
-    const { offsetX, offsetY } = getOffsetCoords(e.nativeEvent);
-    canvasRef.current.lastX = offsetX;
-    canvasRef.current.lastY = offsetY;
+    const { x, y } = getCoordinates(e);
+    canvasRef.current.lastX = x;
+    canvasRef.current.lastY = y;
   };
 
   const handleMouseMove = (e) => {
     if (!isDrawing || !canDraw) return;
+    e.preventDefault();
     const canvas = canvasRef.current;
-    const { offsetX, offsetY } = getOffsetCoords(e.nativeEvent);
+    const { x, y } = getCoordinates(e);
     const x0 = canvas.lastX;
     const y0 = canvas.lastY;
-    const x1 = offsetX;
-    const y1 = offsetY;
+    const x1 = x;
+    const y1 = y;
     const lineData = { x0, y0, x1, y1, color: "black" };
     drawLine(lineData);
     socket.emit("draw", lineData);
@@ -123,27 +153,30 @@ const CanvasBoard = () => {
     canvas.lastY = y1;
   };
 
-  const handleMouseUp = () => setIsDrawing(false);
+  const handleMouseUp = (e) => {
+    if (e) e.preventDefault();
+    setIsDrawing(false);
+  };
 
-  // ✅ Touch Handlers for Mobile
+  // Touch handlers that use the same coordinate system
   const handleTouchStart = (e) => {
     if (!canDraw) return;
     e.preventDefault();
     setIsDrawing(true);
-    const { offsetX, offsetY } = getOffsetCoords(e);
-    canvasRef.current.lastX = offsetX;
-    canvasRef.current.lastY = offsetY;
+    const { x, y } = getCoordinates(e);
+    canvasRef.current.lastX = x;
+    canvasRef.current.lastY = y;
   };
 
   const handleTouchMove = (e) => {
     if (!isDrawing || !canDraw) return;
     e.preventDefault();
     const canvas = canvasRef.current;
-    const { offsetX, offsetY } = getOffsetCoords(e);
+    const { x, y } = getCoordinates(e);
     const x0 = canvas.lastX;
     const y0 = canvas.lastY;
-    const x1 = offsetX;
-    const y1 = offsetY;
+    const x1 = x;
+    const y1 = y;
     const lineData = { x0, y0, x1, y1, color: "black" };
     drawLine(lineData);
     socket.emit("draw", lineData);
@@ -151,7 +184,10 @@ const CanvasBoard = () => {
     canvas.lastY = y1;
   };
 
-  const handleTouchEnd = () => setIsDrawing(false);
+  const handleTouchEnd = (e) => {
+    e.preventDefault();
+    setIsDrawing(false);
+  };
 
   const handleLeave = () => {
     socket.emit("leave");
@@ -171,8 +207,10 @@ const CanvasBoard = () => {
 
   const handleClear = () => {
     if (canDraw) {
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext("2d");
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
       socket.emit("clear");
     }
   };
@@ -247,9 +285,15 @@ const CanvasBoard = () => {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp} // Stop drawing when mouse leaves
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd} // Stop drawing if touch is cancelled
+            style={{
+              touchAction: 'none', // Prevent scrolling and zooming on canvas
+              userSelect: 'none' // Prevent text selection
+            }}
           />
         </div>
         {canDraw && (
